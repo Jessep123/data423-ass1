@@ -51,6 +51,12 @@ shinyUI(
                                p("• Filters for factor variables or date range can be applied to shrink the visual."),
                                p("• The 'Display Distinct Datatypes' will apply colour coding to visualize different datatypes within the visual. All currently applied filters/selected variables will be kept.")
                                ),
+               accordion_panel("Scatter Plot",
+                               p("• This tab displays a scatter plot of numeric variable datapoints plotted against date."),
+                               p("• By default, all numeric variables are selected."),
+                               p("• Datapoints can be coloured by any level of a categorical factor OR what numeric variable they belong to ('Variable' option)."),
+                               p("• By default, datapoints are coloured by Operator.")
+                                ),
                accordion_panel("Rising Value Chart",
                                p("• This tab displays a rising value chart to visualize any gaps in numeric variable ranges."),
                                p("• By default, all variables have been scaled and centered to a standardized z-score, but this can be adjusted if necessary."),
@@ -148,6 +154,45 @@ shinyUI(
               plotOutput("missing_data")
              )
 
+    ),
+    
+    tabPanel("Scatter Plot",
+             h3("Scatter Plot"),
+             layout_sidebar(
+               sidebar = sidebar(
+                 title = '',
+                 actionButton("reset_input_counts_over_time", "Reset Inputs"),
+                 accordion(open = FALSE,
+                           accordion_panel(
+                             "Select Variables",
+                             select_variables_numeric_counts_over_time
+                           ),
+                           accordion_panel(
+                             "Filter Variables",
+                             uiOutput("dynamic_filters_counts_over_time"),
+                             actionButton("reset_filter_input_counts_over_time", "Reset Filters")
+                           )
+                           
+                 ),
+                 
+                 pickerInput(
+                   inputId = "counts_colourby",
+                   label = "Colour By",
+                   choices = c("None", "Variable", names(cat_vars)),
+                   selected = "Operator",
+                   multiple = FALSE,
+                   options = list(
+                     `actions-box` = TRUE,  
+                     `live-search` = TRUE    
+                   )
+                 ),
+
+                 
+                 open = "open",
+                 width = "350px"),
+               
+               plotlyOutput("counts_over_time")
+             )
     ),
     
     

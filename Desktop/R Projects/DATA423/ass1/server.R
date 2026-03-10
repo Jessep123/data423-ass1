@@ -88,14 +88,25 @@ shinyServer(function(input, output, session) {
         )
         } else if(label == "mosaic"){
 
-          #Only return selected x,y,z cols
+          #Only return categorical cols
           selected_vars <- unlist(c(
-            input$selected_vars_mosaic_x,
-            input$selected_vars_mosaic_y,
-            input$selected_vars_mosaic_z,
-            input$selected_vars_mosaic_xyz
+            cat_cols
           ), use.names = FALSE)
         }
+        else if(label == "missing"){
+          # Returning date variable always for missing
+          selected_vars <-unlist(c(
+            "Date",
+            input[[cat_id]],
+            num_cols
+          ), use.names = FALSE)}
+        else if (label == "counts_over_time"){
+          #Selected columns to be return for plot
+          selected_vars <- unlist(c(
+            "Date",
+            cat_cols,
+            num_cols
+          ), use.names = FALSE)}
         else {
           #Selected columns to be return for plot
           selected_vars <- unlist(c(
@@ -119,7 +130,8 @@ shinyServer(function(input, output, session) {
     reactive_boxplot <- reactive_dataset("boxplot")
     reactive_mosaic <- reactive_dataset("mosaic")
     reactive_data <- reactive_dataset("data")
-  
+    reactive_counts_over_time <- reactive_dataset("counts_over_time")
+    
     #Reactive data table for checking data and testing functions
     output$reactive_table <- renderDataTable({
       reactive_mosaic()
@@ -162,6 +174,7 @@ shinyServer(function(input, output, session) {
   output$dynamic_filters_boxplot <- renderUI(make_dynamic_filters("boxplot"))
   output$dynamic_filters_mosaic <- renderUI(make_dynamic_filters("mosaic"))
   output$dynamic_filters_data <- renderUI(make_dynamic_filters("data"))
+  output$dynamic_filters_counts_over_time <- renderUI(make_dynamic_filters("counts_over_time"))
   
   
   # ================================================================================
@@ -391,7 +404,16 @@ shinyServer(function(input, output, session) {
       
       req(reactive_missing())
       
+
       df <- reactive_missing()
+      
+      period_min <- min(df$Date)
+      period_max <- max(df$Date)
+      
+      #Removing date column from dataset if it is not selected
+      if (is.null(input$selected_vars_date_missing)){
+        df$Date <- NULL
+      }
       
 
       date_cols     <- names(df)[sapply(df, inherits, "Date")]
@@ -414,35 +436,52 @@ shinyServer(function(input, output, session) {
       #Applying my new special order
       df <- df[, new_order]
 
-      #Adjusting column labels to include missing %
-      names(df) <-  paste0(names(df)," (", round(missing_pct[names(df)], 1),"%)")
-      
+
       #Setting colour/legend inputs depending on if distinct datatypes selected or not
       if (input$distinct_datatypes_missing){
         dtype_colours <-  datatype_colours
         na_value <- "red"
+        
         legend_position <- "right"
+        
+        legend_breaks <- names(dtype_colours)
+        #Adjusting column labels to include missing %
+        names(df) <-  paste0(names(df)," (", round(missing_pct[names(df)], 0),"%)")
+        
+        
+        viz <- vis_dat(df, sort_type = FALSE)
+        scale_fill <- scale_fill_manual(
+          
+          values = dtype_colours,
+          
+          breaks = legend_breaks,
+          
+          na.value = na_value)
+        
+
+        
       } else{
-        dtype_colours <-  datatype_colours_grey
         na_value = "red"
-        legend_position <- "none"
+        legend_position <- "right"
+        scale_fill <-  scale_fill_manual(
+          values = c("FALSE" = "grey80", "TRUE" = "red"),
+          labels = c("Not Missing", "Missing"),
+          name = "Value Status"
+        )
+        
+        viz <- vis_miss(df, sort_miss = FALSE, show_perc = FALSE)
       }
+      
         
       
       #Visualizing dataframe with new order and sort_type = FALSE
       #This way factor/ordered factors are side by side in the final plot
-      vis_dat(df, sort_type = FALSE) +
+    viz +
         labs(title = paste0("Missing Data \n",
-                            min(df$Date),
+                            period_min,
                             " - ",
-                            max(df$Date))) +
-        scale_fill_manual(
-
-                        values = dtype_colours,
-                          
-                          breaks = names(dtype_colours),
-                          
-                          na.value = na_value) + #datatype colours list found in global.r
+                            period_max)) +
+        scale_fill + #datatype colours list found in global.r
         
       theme(
         axis.text.x = element_text(
@@ -450,10 +489,11 @@ shinyServer(function(input, output, session) {
           hjust = 1,
           vjust = 0.5),
         plot.title = element_text(size = 20, hjust = 0.5, face = "bold"),
+        plot.margin = margin(t = 50),
         legend.position = legend_position) 
+
       
-     
-        
+
     })
     
     #Reset missing chart inputs
@@ -481,9 +521,7 @@ shinyServer(function(input, output, session) {
       req(reactive_rising())
       df <- reactive_rising()
 
-      #Plot titles/labels
-      title = "Rising Value Chart"
-      x_label = "Percentile (%)"
+      
 
       #Different y-axis label depending on scale input
       if (input$center_data == TRUE && input$scale_data == TRUE){
@@ -496,6 +534,10 @@ shinyServer(function(input, output, session) {
         y_label = "Scaled Values"
       }
       else{y_label = "Unadjusted Values"}
+      
+      #Plot titles/labels
+      title = paste0("Rising Value Chart \n", "Jump Threshold = ", input$jump_threshold, " | ", y_label)
+      x_label = "Percentile (%)"
 
       #Plot if no variables are selected
       if(ncol(df) == 0) {
@@ -519,6 +561,8 @@ shinyServer(function(input, output, session) {
         )
         return()
       }
+      
+      
 
         #Ensuring dataframe has only numeric columns
         df <- df[, sapply(df, is.numeric), drop = FALSE]
@@ -575,7 +619,12 @@ shinyServer(function(input, output, session) {
                 col = mypalette,
                 main = title,
                 sub = paste0("Variable - ", colnames(df))
-             )
+             ) + 
+          theme(
+            plot.title = element_text(hjust = 0.5, face = "bold"),
+            plot.margin = margin(t = 50)
+          )
+        
         #Control if no variables are selected
       } else { #PLotting for all other variables
       
@@ -588,7 +637,12 @@ shinyServer(function(input, output, session) {
               lwd = 1,
               col = mypalette,
               main = title,
-              sub = paste0(ncol(df), " Variables"))
+              sub = paste0(ncol(df), " Variables")) +
+          theme(
+            plot.title = element_text(hjust = 0.5, face = "bold"),
+            plot.margin = margin(t = 50)
+          )
+        
 
       legend(legend = colnames(df),
              x = "topleft",
@@ -622,8 +676,14 @@ shinyServer(function(input, output, session) {
       df <- reactive_ggpairs()
       
       req(ncol(df) > 0)
+      title <-  paste0("Pairs Plot of Data \n", ncol(df), "/31 Variables Selected")
       
       colour_var <- input$ggpairs_colourby
+      
+      theme <- theme(
+                plot.title = element_text(size = 20, hjust = 0.5, face = "bold"),
+                plot.margin = margin(t = 50)
+                    ) 
       
       if (colour_var != "None") {
         
@@ -633,18 +693,22 @@ shinyServer(function(input, output, session) {
           df,
           columns = cols_to_plot,
           mapping = aes(colour = .data[[colour_var]]),
-          title = "Pairs Plot of Data",
-          progress = FALSE
-        )
+          progress = FALSE,
+          title = title
+        ) +
+          theme
         
       } else {
         
         ggpairs(
           df,
-          title = "Pairs Plot of Data",
-          progress = FALSE
-        )
+          progress = FALSE,
+          title = title
+        ) +
+          theme
       }
+      
+
     })
     
     #Reset ggpairs value inputs
@@ -666,6 +730,27 @@ shinyServer(function(input, output, session) {
   output$boxplot <-  renderPlotly({
     df <-  reactive_boxplot()
     
+    #Removing categorical variables
+    df <- df[, sapply(df, is.numeric), drop = FALSE]
+    req(ncol(df) > 0)
+    
+    #Different y-axis label depending on scale input
+    if (input$center_data_boxplot == TRUE && input$scale_data_boxplot == TRUE){
+      x_label = "Standardised Values (Z-Score)"
+    }
+    else if (input$center_data_boxplot == TRUE && input$scale_data_boxplot == FALSE){
+      x_label = "Centered Values"
+    }
+    else if (input$center_data_boxplot == FALSE && input$scale_data_boxplot == TRUE){
+      x_label = "Scaled Values"
+    }
+    else{x_label = "Unadjusted Values"}
+    
+    #Plot titles/labels
+    y_label = paste0("Variable (", ncol(df), "/31 Selected)")
+    
+    title = paste0("Rising Value Chart \n", x_label, " | ", ncol(df), "/31 Variables Selected")
+
 
     #Scaling/centering data depending on input
     if(input$center_data_boxplot || input$scale_data_boxplot) {
@@ -676,9 +761,7 @@ shinyServer(function(input, output, session) {
     
     iqr_multiplier <-  input$iqr_boxplot
     
-    #Removing categorical variables
-    df <- df[, sapply(df, is.numeric), drop = FALSE]
-    req(ncol(df) > 0)
+
     
     # Convert to long format
     df_long <- tidyr::pivot_longer(
@@ -688,19 +771,62 @@ shinyServer(function(input, output, session) {
       values_to = "Value"
     )
     
-    plot <- ggplot(df_long,
-           aes(x = Variable,
-                     y = Value)
-           ) +
-      geom_boxplot(coef = iqr_multiplier,
-                   outlier.colour = "red",
-                   col = "blue",
-                   fill = "lightblue") +
-      labs(title = "Boxplot") +
-      coord_flip() 
 
-    ggplotly(plot)
     
+    iqr_multiplier <- input$iqr_boxplot
+    
+    #Calculating IQR ranges manually using multiplier input
+    df_stats <- df_long %>%
+      group_by(Variable) %>%
+      summarise(
+        q1 = quantile(Value, 0.25, na.rm = TRUE),
+        q3 = quantile(Value, 0.75, na.rm = TRUE),
+        median = median(Value, na.rm = TRUE),
+        iqr = IQR(Value, na.rm = TRUE),
+        lower = q1 - iqr_multiplier * iqr,
+        upper = q3 + iqr_multiplier * iqr
+      )
+    
+    
+    #Identifying outliers based on IQR multiplier range
+    outliers <- df_long %>%
+      left_join(df_stats, by = "Variable") %>%
+      filter(Value < lower | Value > upper)
+    
+    #Plotting using plotly 
+    plot_ly(
+      type = "box",
+      orientation = "h",
+      q1 = df_stats$q1,
+      median = df_stats$median,
+      q3 = df_stats$q3,
+      lowerfence = df_stats$lower,
+      upperfence = df_stats$upper,
+      y = df_stats$Variable
+    ) %>%
+      #Adding IQR determined outliers
+      add_markers(
+        data = outliers,
+        x = ~Value,
+        y = ~Variable,
+        marker = list(color = "red", size = 6),
+        name = "Outliers",
+        inherit = FALSE
+      ) %>% 
+      #Formatting layout of visual
+      layout(
+        title = list(
+                    text = paste0("<b>", title, "</b>"),
+                    x = 0.5
+                     ),
+        xaxis = list(
+                     title = list(text = x_label, standoff = 30)
+                    ),
+        yaxis = list(
+                    title = list(text = y_label)
+                    ),
+        margin = list(t = 80)
+      )
     
   })
     #Reset boxplot value inputs
@@ -726,7 +852,7 @@ shinyServer(function(input, output, session) {
         req(!is.null(df))
         
         #Defining formula for mosaic plot
-        if (is.null(input$selected_vars_mosaic_z) && is.null(input$selected_vars_mosaic_xyz)){
+        if (input$selected_vars_mosaic_z == "None" && is.null(input$selected_vars_mosaic_xyz)){
         formula <- as.formula(
                             paste("~",
                             input$selected_vars_mosaic_x,
@@ -734,7 +860,7 @@ shinyServer(function(input, output, session) {
                             input$selected_vars_mosaic_y)
                              )
         #If a third variable is selected 
-        } else if (!is.null(input$selected_vars_mosaic_z) && is.null(input$selected_vars_mosaic_xyz)){
+        } else if (input$selected_vars_mosaic_z != "None" &&  is.null(input$selected_vars_mosaic_xyz)){
           formula <- as.formula(
             paste("~",
                   input$selected_vars_mosaic_x,
@@ -769,8 +895,7 @@ shinyServer(function(input, output, session) {
                legend = TRUE,
                # split_vertical = TRUE, 
                # highlighting = input$selected_vars_mosaic_x,
-               main = paste("Mosaic Plot\n",
-                            # paste("Variables - "),
+               main = paste("Mosaic Plot",
                             paste(deparse(formula)))
         )
           
@@ -791,7 +916,80 @@ shinyServer(function(input, output, session) {
       reset_filters("mosaic")
     })
     
+# =================================================================================
+# Scatter Plot
+# =================================================================================
+    output$counts_over_time <-  renderPlotly({
+      df <-  reactive_counts_over_time()
+      period_min <-  min(df$Date)
+      period_max <-  max(df$Date)
+      
+
+
+      plot_data <- df %>%
+        tidyr::pivot_longer(
+          cols = where(is.numeric),
+          names_to = "Variable",
+          values_to = "Value"
+        )
+      
+      #Colour of Points
+      colour <-  input$counts_colourby
+      
+      #If no colour selected, mapping aesthetic has no colour
+      if (input$counts_colourby == "None"){
+        plot <-  ggplot(plot_data,
+                        aes(x = Date,
+                            y = Value
+                        )) 
+        #If colour is selected, mapping colours points based on selected variable
+      } else{
+        plot <-  ggplot(plot_data,
+                        aes(x = Date,
+                            y = Value,
+                            colour = .data[[colour]]
+                        )) 
+      }
+      
+      #Creating final plot
+      plot  <-  plot +
+      
+        geom_point() +
+        
+        labs(
+          x = "Date",
+          y = "Value",
+          title = paste0("Numeric Variable Values by Date \n", period_min, " - ", period_max)
+        ) +
+        scale_x_date(
+          date_breaks = "6 months",
+          date_labels = "%b\n%Y"
+        ) +
+        theme_minimal()+
+        theme(
+          plot.title = element_text(hjust = 0.5, face = "bold"),
+          plot.margin = margin(t = 50)
+        )
+      
+      #Rendering plot as plotly object
+    ggplotly(plot) 
     
+    })
     
-    } 
+    #Reset boxplot value inputs
+    observeEvent(input$reset_input_counts_over_time, {
+      reset("selected_vars_numeric_counts_over_time")
+      reset("selected_vars_categorical_counts_over_time")
+      reset("selected_vars_date_counts_over_time")
+      reset("selected_vars_date_counts_over_time")
+      reset_filters("counts_colourby")
+
+    })
+    
+    #Reset only filter inputs
+    observeEvent(input$reset_filter_input_counts_over_time, {
+      reset_filters("counts_over_time")
+    })
+} 
+
 )

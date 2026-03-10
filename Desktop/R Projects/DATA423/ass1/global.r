@@ -25,6 +25,7 @@ library(openxlsx)
 library(haven)
 library(sass)
 library(plotly)
+library(rsconnect)
 #Reading in dataset
 data <- read.csv('Ass1Data.csv',
                  stringsAsFactors = TRUE)
@@ -69,11 +70,11 @@ data$Temp <- factor(
 
 # Global datatype colours to be used in server/ui
 datatype_colours <- c(
-  "factor"    = "#2ca02c",
-  "numeric"   = "#1f77b4",
-  "integer"   = "#1f77b4",
-  "Date"      = "#9467bd",
-  "ordered\nfactor" = "#74c476"
+  "factor"    = "#86cfa5",
+  "numeric"   = "#8fbce6",
+  "integer"   = "#8fbce6",
+  "Date"      = "#c2a5e2",
+  "ordered\nfactor" = "#b7e4c7"
 )
 datatype_colours_grey <- c(
   "character" = "grey",
@@ -258,29 +259,6 @@ select_variables_categorical_boxplot <- pickerInput(
 #   Mosaic Inputs 
 # ================================================================================
 
-
-select_variables_numeric_mosaic <- pickerInput(
-  inputId = "selected_vars_numeric_mosaic",
-  label = "Numeric Variables",
-  choices = names(non_cat_vars),
-  selected = names(non_cat_vars),
-  multiple = TRUE,
-  options = list(
-    `actions-box` = TRUE,
-    `live-search` = TRUE
-  )
-)
-select_variables_categorical_mosaic <- pickerInput(
-  inputId = "selected_vars_categorical_mosaic",
-  label = "Categorical Variables",
-  choices = names(cat_vars),
-  selected = c("Operator", "Location", "Price"),
-  multiple = TRUE,
-  options = list(
-    `actions-box` = TRUE,  
-    `live-search` = TRUE    
-  )
-)
 select_variables_mosaic_x <- pickerInput(
   inputId = "selected_vars_mosaic_x",
   label = "Select X-Axis Variable",
@@ -308,7 +286,7 @@ select_variables_mosaic_y <- pickerInput(
 select_variables_mosaic_z <- pickerInput(
   inputId = "selected_vars_mosaic_z",
   label = "Select 3rd Variable (Optional)",
-  choices = names(cat_vars),
+  choices = c("None", names(cat_vars)),
   selected = "Operator",
   multiple = FALSE,
   options = list(
@@ -355,6 +333,10 @@ select_variables_date_data <- pickerInput(
     `live-search` = FALSE)
 )
 
+# =================================================================================
+#   Scatterpplot
+# ================================================================================
+
 select_variables_categorical_data <- pickerInput(
   inputId = "selected_vars_categorical_data",
   label = "Categorical Variables",
@@ -365,4 +347,37 @@ select_variables_categorical_data <- pickerInput(
     `actions-box` = TRUE,  
     `live-search` = TRUE    
   )
+)
+
+select_variables_numeric_counts_over_time <- pickerInput(
+  inputId = "selected_vars_numeric_counts_over_time",
+  label = "Numeric Variables",
+  choices = names(non_cat_vars),
+  selected = names(non_cat_vars),
+  multiple = TRUE,
+  options = list(
+    `actions-box` = TRUE,
+    `live-search` = TRUE
+  )
+)
+select_variables_categorical_counts_over_time <- pickerInput(
+  inputId = "selected_vars_categorical_counts_over_time",
+  label = "Numeric Variables",
+  choices = names(cat_vars),
+  selected = names(cat_vars),
+  multiple = TRUE,
+  options = list(
+    `actions-box` = TRUE,
+    `live-search` = TRUE
+  )
+)
+select_variables_date_counts_over_time <- pickerInput(
+  inputId = "selected_vars_date_counts_over_time",
+  label = "Date",
+  choices = "Date",
+  selected = "Date",
+  multiple = TRUE,
+  options = list(
+    `actions-box` = FALSE,
+    `live-search` = FALSE)
 )
