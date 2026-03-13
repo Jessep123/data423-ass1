@@ -113,13 +113,9 @@ shinyUI(
              h3("Data Summary"),
              uiOutput('variable_summary'),
              accordion(open = FALSE,
-               accordion_panel('Numeric Variables Summary', tableOutput('numeric_summary')),
-               accordion_panel('Categorical Variables Summary', DTOutput('categorical_summary')),
-               accordion_panel('Date Variable Summary', 
-                               textOutput('date_summary1'),
-                               textOutput('date_summary2')
-                               ),
-               accordion_panel('Summary', htmlOutput('summary_table'))
+               accordion_panel('Numeric Variables Summary', htmlOutput('numeric_summary')),
+               accordion_panel('Categorical Variables Summary', htmlOutput('categorical_summary')),
+               accordion_panel('Date Variable Summary', htmlOutput('date_summary'))
                )
     ),
 
@@ -186,6 +182,19 @@ shinyUI(
                      `live-search` = TRUE    
                    )
                  ),
+                 
+                 pickerInput(
+                   inputId = "counts_colourby_manual",
+                   label = "Create Colour Manual Group",
+                   choices = c(names(non_cat_vars)),
+                   selected = NULL,
+                   multiple = TRUE,
+                   options = list(
+                     `actions-box` = TRUE,  
+                     `live-search` = TRUE    
+                   )
+                 ),
+                 p("NOTE - Above manual filter overwrites 'Colour By' if active", style = "color:red;"),
 
                  
                  open = "open",
@@ -245,16 +254,23 @@ shinyUI(
                               )),
                  radioButtons("corr_order",
                               "Order Variables:",
-                              c("No Order" = FALSE,
-                                "PCA",
-                                "OLO",
-                                "GW",
-                                "HC")
+                              c(
+                                "Original" = "original",
+                                "AOE",
+                                "FPC",
+                                "Heirarchical Clustering" = "hclust",
+                                "Alphabetically" = "alphabet")
+                              
                  ),
                  radioButtons("corr_absolute",
                               "Use Absolute Values?",
                               c("No" = FALSE,
                                 "Yes" = TRUE)
+                              ),
+                  radioButtons("corr_display",
+                                "Display Values?",
+                                c("No",
+                                 "Yes")
                  ),
                  open = "open",
                  width = "350px"
@@ -281,6 +297,9 @@ shinyUI(
                                value = FALSE),
                  checkboxInput("scale_data_boxplot", 
                                "Scale Data",
+                               value = FALSE),
+                 checkboxInput("boxplot_order", 
+                               "Order Descending",
                                value = FALSE),
                  accordion(open = FALSE,
                            accordion_panel(

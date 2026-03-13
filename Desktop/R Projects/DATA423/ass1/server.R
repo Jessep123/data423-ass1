@@ -131,6 +131,7 @@ shinyServer(function(input, output, session) {
     reactive_mosaic <- reactive_dataset("mosaic")
     reactive_data <- reactive_dataset("data")
     reactive_counts_over_time <- reactive_dataset("counts_over_time")
+    reactive_corr <- reactive_dataset("corr")
     
     #Reactive data table for checking data and testing functions
     output$reactive_table <- renderDataTable({
@@ -175,6 +176,7 @@ shinyServer(function(input, output, session) {
   output$dynamic_filters_mosaic <- renderUI(make_dynamic_filters("mosaic"))
   output$dynamic_filters_data <- renderUI(make_dynamic_filters("data"))
   output$dynamic_filters_counts_over_time <- renderUI(make_dynamic_filters("counts_over_time"))
+  output$dynamic_filters_corr <- renderUI(make_dynamic_filters("corr"))
   
   
   # ================================================================================
@@ -200,62 +202,70 @@ shinyServer(function(input, output, session) {
       )
     })
     
-    output$numeric_summary <- renderTable({
+    output$numeric_summary <- renderUI({
       data %>%
-        summarise(across(
-          where(is.numeric),
-          list(
-            Mean = ~ mean(.x, na.rm = TRUE),
-            SD   = ~ sd(.x, na.rm = TRUE),
-            Min  = ~ min(.x, na.rm = TRUE),
-            Max  = ~ max(.x, na.rm = TRUE)
-          )
-        )) %>%
-        pivot_longer(
-          everything(),
-          names_to = c("Variable", ".value"),
-          names_sep = "_"
-        ) %>%
-        mutate(across(where(is.numeric), ~ round(.x, 2)))
+        select(where(is.numeric)) %>% 
+        summarytools::dfSummary(col.widths = c(10,80,150,120,120,180,220)) %>%
+        summarytools::view(, method = "render")
     })
     
     output$data <- renderDataTable({data})
     
     
-    output$categorical_summary <- renderDataTable({
-      datatable(
-      {data %>%
-        select(where(~ is.factor(.x))) %>%
-        summarise(across(
-          everything(),
-          list(
-            Distinct_Count = ~ n_distinct(.x),
-            Missing_Values = ~sum(is.na(.x)),
-            Unique_Values = ~ paste(sort(unique(na.omit(.x))), collapse = ", ")
-          )
-        )) %>%
-        tidyr::pivot_longer(
-          everything(),
-          names_to = c("Variable", ".value"),
-          names_sep = "_"
-        )},
-      
-      options = list(pageLength = 12)
-      )
+    output$categorical_summary <- renderUI({
+      data %>%
+        select(where(is.factor)) %>% 
+        summarytools::dfSummary(col.widths = c(10,80,150,120,120,180,220)) %>%
+        summarytools::view(, method = "render")
       })
     
     
-    output$date_summary1 <-renderText({
-            date_range <- range(data$Date)
-            paste('The date range in this dataset is from', date_range[1], 'to', date_range[2])
+    output$date_summary <- renderUI({
+      data %>%
+        select(where(~inherits(.x, "Date"))) %>% 
+        summarytools::dfSummary(col.widths = c(10,80,150,120,120,180,220)) %>%
+        summarytools::view(, method = "render")
     })
     
-    output$date_summary2 <-renderText({
-      
 
-            date_range <- range(data$Date)
-            paste('Over a total of',date_range[2] - date_range[1], 'days')
-    }) 
+    output$date_counts <- renderPlotly({
+      #Creating a bar chart of row counts for each month across the data range
+     plot <-  data %>% 
+        mutate(YearMonth = floor_date(Date, "month")) %>%
+        group_by(YearMonth) %>%
+        summarise(Month_Count = n(), .groups = "drop") %>%
+        ggplot(aes(x = YearMonth, y = Month_Count)) +
+        geom_col()+
+        
+        labs(
+          x = "Date (6 Month Breaks)",
+          y = "Number of Rows",
+          title = paste0("Total Row Counts by Month\n",
+                         min(data$Date), " - ", max(data$Date))
+        ) +
+       scale_x_date(
+          date_breaks = "6 months",
+          date_labels = "%b\n%Y"
+        ) +
+       
+       theme_minimal() +
+       theme(
+         plot.title = element_text(hjust = 0.5, face = "bold"),
+         plot.margin = margin(t = 50)
+             )
+     
+     ggplotly(plot) %>% 
+      #Readjusting title positions so they look a bit nicer
+       layout(
+         margin = list(t = 90),  
+         xaxis = list(
+           title = list(standoff = 30)
+         ),
+         yaxis = list(
+           title = list(standoff = 30)
+         )
+       )
+    })
     
 # ================================================================================
 #       Data Export
@@ -377,15 +387,55 @@ shinyServer(function(input, output, session) {
       
       df <- data
       
-      corrgram(df, 
-               order = input$corr_order, 
-               abs = input$corr_absolute, 
-               cor.method = input$corr_method, 
-               main = "Correlation Chart",
-               lower.panel = NULL,
-               col.regions=colorRampPalette(c("blue","white", "red")),
-               label.pos = c(0.5, 0.5),
-               text.panel=panel.txt)
+      df <- df[, sapply(df, is.numeric)]
+      
+      corr_matrix <- cor(df,
+                         method = input$corr_method,
+                         use = "complete.obs")
+      
+      if (input$corr_absolute) {
+        corr_matrix <- abs(corr_matrix)
+      }
+      
+
+      if (input$corr_display == "No") {
+        display  <- NULL
+      } else{ display <- "black"}
+      
+      corrplot(
+        corr_matrix,
+        method = "color",
+        type = "upper",
+        order = input$corr_order,
+        col = colorRampPalette(c("blue","white","red"))(200),
+        addCoef.col = display,
+        cl.pos = "r",
+        tl.col = "black",
+        title = paste0(
+          "Correlation Chart\n",
+          "Type - ", input$corr_method,
+          " | ",
+          "Order - ", input$corr_order
+        ),
+        mar = c(0,0,2,0)
+      )
+      
+      # corrgram(df, 
+      #          order = input$corr_order, 
+      #          abs = input$corr_absolute, 
+      #          cor.method = input$corr_method, 
+      #          main = paste0("Correlation Chart \n",
+      #                               "Type - ",
+      #                               input$corr_method,
+      #                               " | ",
+      #                               "Order - ",
+      #                               input$corr_order),
+      #          lower.panel = NULL,
+      #          col.regions=colorRampPalette(c("blue","white", "red")),
+      #          label.pos = c(0.5, 0.5),
+      #          text.panel=panel.txt,
+      #          cl.pos = "r"
+      #          ) 
     })
     
     #Reset data export inputs
@@ -458,6 +508,9 @@ shinyServer(function(input, output, session) {
           
           na.value = na_value)
         
+        is_it_coloured <-  " Coloured by Data Type"
+        
+        
 
         
       } else{
@@ -470,6 +523,8 @@ shinyServer(function(input, output, session) {
         )
         
         viz <- vis_miss(df, sort_miss = FALSE, show_perc = FALSE)
+        
+        is_it_coloured <-  NULL
       }
       
         
@@ -477,7 +532,9 @@ shinyServer(function(input, output, session) {
       #Visualizing dataframe with new order and sort_type = FALSE
       #This way factor/ordered factors are side by side in the final plot
     viz +
-        labs(title = paste0("Missing Data \n",
+        labs(title = paste0("Missing Data",
+                            is_it_coloured,
+                            "\n",
                             period_min,
                             " - ",
                             period_max)) +
@@ -676,7 +733,21 @@ shinyServer(function(input, output, session) {
       df <- reactive_ggpairs()
       
       req(ncol(df) > 0)
-      title <-  paste0("Pairs Plot of Data \n", ncol(df), "/31 Variables Selected")
+      
+      if (input$ggpairs_colourby != "None"){
+      cols <- ncol(df) - 1
+      colouring <- paste0("Coloured by ", input$ggpairs_colourby)
+      } else {
+        cols <- ncol(df)
+        colouring <- NULL
+        
+        }
+      
+      title <-  paste0("Pairs Plot of Data \n",
+                       cols, 
+                       "/31 Variables Selected",
+                       " | ",
+                       colouring)
       
       colour_var <- input$ggpairs_colourby
       
@@ -749,7 +820,7 @@ shinyServer(function(input, output, session) {
     #Plot titles/labels
     y_label = paste0("Variable (", ncol(df), "/31 Selected)")
     
-    title = paste0("Rising Value Chart \n", x_label, " | ", ncol(df), "/31 Variables Selected")
+    title = paste0("Boxplot \n", x_label, " | ", ncol(df), "/31 Variables Selected | ", "IQR ", input$iqr_boxplot)
 
 
     #Scaling/centering data depending on input
@@ -785,7 +856,10 @@ shinyServer(function(input, output, session) {
         iqr = IQR(Value, na.rm = TRUE),
         lower = q1 - iqr_multiplier * iqr,
         upper = q3 + iqr_multiplier * iqr
-      )
+      )  %>%
+      arrange(Variable)
+    
+    df_stats$Variable <- factor(df_stats$Variable, levels = df_stats$Variable)
     
     
     #Identifying outliers based on IQR multiplier range
@@ -793,6 +867,17 @@ shinyServer(function(input, output, session) {
       left_join(df_stats, by = "Variable") %>%
       filter(Value < lower | Value > upper)
     
+    outliers$Variable <- factor(outliers$Variable, levels = levels(df_stats$Variable))
+    
+    #Setting plot order depending on input
+    #boxplot_order manually defined in global.r
+    if (input$boxplot_order){
+      plot_order <-  boxplot_order
+    } else { 
+      plot_order <-rev(boxplot_order)
+      }
+
+
     #Plotting using plotly 
     plot_ly(
       type = "box",
@@ -823,7 +908,9 @@ shinyServer(function(input, output, session) {
                      title = list(text = x_label, standoff = 30)
                     ),
         yaxis = list(
-                    title = list(text = y_label)
+                    title = list(text = y_label),
+                    categoryorder = "array",
+                    categoryarray = plot_order 
                     ),
         margin = list(t = 80)
       )
@@ -933,23 +1020,40 @@ shinyServer(function(input, output, session) {
           values_to = "Value"
         )
       
+      
+      
       #Colour of Points
       colour <-  input$counts_colourby
       
       #If no colour selected, mapping aesthetic has no colour
-      if (input$counts_colourby == "None"){
+      if (input$counts_colourby == "None" && is.null(input$counts_colourby_manual)){
         plot <-  ggplot(plot_data,
                         aes(x = Date,
                             y = Value
                         )) 
         #If colour is selected, mapping colours points based on selected variable
-      } else{
+      } else if (input$counts_colourby != "None" && is.null(input$counts_colourby_manual)){
         plot <-  ggplot(plot_data,
                         aes(x = Date,
                             y = Value,
                             colour = .data[[colour]]
                         )) 
-      }
+      } else if (!is.null(input$counts_colourby_manual)){
+        #Adding colour column to plot data to highlight selected vars
+        plot_data <- plot_data %>%
+                        mutate(
+                          Highlight = ifelse(
+                            Variable %in% input$counts_colourby_manual,
+                            "Selected Variables",
+                            "Other Variables"
+                          )
+                        )
+        plot <-  ggplot(plot_data,
+                        aes(x = Date,
+                            y = Value,
+                            colour = Highlight
+                        )) 
+        }
       
       #Creating final plot
       plot  <-  plot +
@@ -979,10 +1083,9 @@ shinyServer(function(input, output, session) {
     #Reset boxplot value inputs
     observeEvent(input$reset_input_counts_over_time, {
       reset("selected_vars_numeric_counts_over_time")
-      reset("selected_vars_categorical_counts_over_time")
-      reset("selected_vars_date_counts_over_time")
-      reset("selected_vars_date_counts_over_time")
-      reset_filters("counts_colourby")
+      reset("counts_colourby")
+      reset("counts_colourby_manual")
+      reset_filters("counts_over_time")
 
     })
     

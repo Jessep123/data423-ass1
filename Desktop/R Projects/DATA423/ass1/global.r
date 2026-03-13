@@ -26,6 +26,7 @@ library(haven)
 library(sass)
 library(plotly)
 library(rsconnect)
+library(corrplot)
 #Reading in dataset
 data <- read.csv('Ass1Data.csv',
                  stringsAsFactors = TRUE)
@@ -84,6 +85,9 @@ datatype_colours_grey <- c(
   "Date"      = "grey",
   "ordered\nfactor" = "grey"
 )
+
+#Manually defining boxplot to order by Y, then sensor number
+boxplot_order <- as.list(c("Y", paste0("sensor", 1:30)))
 
 
 
