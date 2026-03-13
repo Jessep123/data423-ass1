@@ -205,8 +205,10 @@ shinyServer(function(input, output, session) {
     output$numeric_summary <- renderUI({
       data %>%
         select(where(is.numeric)) %>% 
-        summarytools::dfSummary(col.widths = c(10,80,150,120,120,180,220)) %>%
-        summarytools::view(, method = "render")
+        summarytools::dfSummary(col.widths = c(10,80,200,120,120,10,10),
+                                graph.magnif = 0.5) %>%
+        summarytools::view(
+          method = "render")
     })
     
     output$data <- renderDataTable({data})
@@ -215,7 +217,8 @@ shinyServer(function(input, output, session) {
     output$categorical_summary <- renderUI({
       data %>%
         select(where(is.factor)) %>% 
-        summarytools::dfSummary(col.widths = c(10,80,150,120,120,180,220)) %>%
+        summarytools::dfSummary(col.widths = c(10,80,150,120,120,180,220),
+                                graph.magnif = 0.5) %>%
         summarytools::view(, method = "render")
       })
     
